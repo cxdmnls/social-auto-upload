@@ -1,287 +1,216 @@
 # social-auto-upload
 
-`social-auto-upload` 是一个强大的自动化工具，旨在帮助内容创作者和运营者高效地将视频内容一键发布到多个国内外主流社交媒体平台。
-项目实现了对 `抖音`、`Bilibili`、`小红书`、`快手`、`视频号`、`百家号` 以及 `TikTok` 等平台的视频上传、定时发布等功能。
-结合各平台 `uploader` 模块，您可以轻松配置和扩展支持的平台，并通过示例脚本快速上手。
+一个面向多平台短视频发布的 Web 工具。项目基于开源自动上传能力做二次开发，当前重点是把原本偏脚本化、偏本机浏览器操作的流程，整理成可以通过前端页面完成账号登录、视频上传、账号选择和发布的工作流。
 
-<img src="media/show/tkupload.gif" alt="tiktok show" width="800"/>
+## 当前状态
 
-## 当前开发状态与服务器部署说明
+项目目前可以在本机运行后端服务，并通过根目录的 `index.html` 使用前端页面完成主要操作：
 
-本仓库正在对 Web 端登录与发布流程做服务器部署适配。当前目标是让用户在前端页面完成账号登录：后端使用 Playwright 打开各平台登录页并抓取二维码，前端通过 SSE 实时显示二维码，用户在前端扫码/完成平台要求的身份验证后，后端保存 Cookie，后续发布复用该 Cookie。
+- 上传待发布的视频文件。
+- 管理发布账号。
+- 通过前端页面展示平台登录二维码。
+- 用户扫码登录，后端保存 Cookie。
+- 发布前统一校验 Cookie 是否有效。
+- Cookie 有效时调用对应平台的 uploader 执行发布。
+- Cookie 失效时跳过该账号，并返回“登录已过期，请重新扫码”的提示。
 
-需要特别注意：在本机调试时，开发者可以看到后端自动化浏览器窗口；但部署到服务器后，通常无法看到或操作后端浏览器。因此登录流程不能依赖“人在服务器浏览器里操作”，而应该以“前端显示二维码和验证提示，用户在前端/手机端完成操作”为目标。目前已在推进以下能力：
+需要注意：项目还在向服务器部署形态适配中。本地开发时可以看到后端 Playwright 打开的浏览器窗口；部署到服务器后，通常无法直接看到或操作后端浏览器。因此登录流程不能长期依赖“人在服务器浏览器里操作”，而应尽量让用户在前端页面和手机端完成扫码、短信验证等步骤。
 
-- 前端 `index.html` 通过 SSE 接收后端二维码并显示。
-- 后端尽量将平台二维码截图为 `data:image/png;base64` 后发给前端，降低跨域、临时链接、`blob:` 图片等导致的显示失败。
-- 平台出现“身份验证”时，后端会向前端发送验证提示；例如优先尝试“发送短信验证”，并提示用户在手机/平台页面继续完成。
-- 发布前会统一校验 Cookie，Cookie 失效时跳过发布并提示“登录已过期，请重新扫码”。
+当前已经做的方向是：后端负责打开平台登录页并抓取二维码，前端通过 SSE 实时接收并显示二维码；如果平台要求身份验证，后端把提示发送给前端，由用户按提示在手机或平台页面完成操作。
 
-该服务器部署适配仍在持续完善中。若某个平台改版导致二维码定位失败，需要针对该平台登录页补充新的定位逻辑。
+## 支持平台
 
-## 目录
+当前 Web 发布流程主要适配以下平台：
 
-- [💡 功能特性](#💡功能特性)
-- [🚀 支持的平台](#🚀支持的平台)
-- [💾 安装指南](#💾安装指南)
-- [🏁 快速开始](#🏁快速开始)
-- [🐇 项目背景](#🐇项目背景)
-- [📃 详细文档](#📃详细文档)
-- [🐾 交流与支持](#🐾交流与支持)
-- [🤝 贡献指南](#🤝贡献指南)
-- [📜 许可证](#📜许可证)
-- [⭐ Star History](#⭐Star-History)
+| 平台 | type |
+| --- | --- |
+| 小红书 | `1` / `xhs` / `xiaohongshu` |
+| 视频号 | `2` / `shipinhao` / `tencent` / `channels` |
+| 抖音 | `3` / `douyin` |
+| 快手 | `4` / `kuaishou` / `ks` |
+| Bilibili | `5` / `bilibili` / `bili` |
 
-## 💡功能特性
+仓库里仍保留了部分原项目的 uploader 和 examples，例如百家号、TikTok 等示例脚本。这些可以作为后续扩展参考，但当前 Web 主流程请以上表为准。
 
-### 已支持平台
+## 项目结构
 
--   **国内平台**:
-    -   [x] 抖音
-    -   [x] 视频号
-    -   [x] Bilibili
-    -   [x] 小红书
-    -   [x] 快手
-    -   [x] 百家号
--   **国外平台**:
-    -   [x] TikTok
+```text
+.
+├── sau_backend.py          # Flask 后端入口，提供前端页面所需 API
+├── index.html              # 当前主要使用的单文件前端页面
+├── myUtils/                # 登录、Cookie 校验、发布调度等封装
+├── uploader/               # 各平台上传实现
+├── db/                     # SQLite 初始化脚本，database.db 不提交
+├── examples/               # 原项目示例脚本，可作为平台调用参考
+├── media/                  # README 或项目展示资源
+├── cookiesFile/            # 运行时 Cookie 文件目录，不提交
+├── videoFile/              # 前端上传的视频文件目录，不提交
+└── videos/                 # 本地测试视频目录，不提交
+```
 
-### 核心功能
+## 本地运行
 
--   [x] 定时上传 (Cron Job / Scheduled Upload)
--   [ ] Cookie 管理 (部分实现，持续优化中)
--   [ ] 国外平台 Proxy 设置 (部分实现)
-
-### 计划支持与开发中
+建议使用 Python 3.10。
 
--   **平台扩展**:
-    -   [ ] YouTube
--   **功能增强**:
-    -   [x] 更易用的版本 (GUI / CLI 交互优化)
-    -   [x] API 封装
-    -   [x] Docker 部署
-    -   [ ] 自动化上传 (更智能的调度策略)
-    -   [ ] 多线程/异步上传优化
-    -   [ ] Slack/消息推送通知
+1. 克隆项目：
 
-### 2025.10.30目前现状
-该项目本人很长一段时间没维护了，有比较大的问题也是能简单快速修复就修复掉
+```bash
+git clone https://github.com/cxdmnls/social-auto-upload.git
+cd social-auto-upload
+```
 
-因为我自己也在创业，每天时间都用不完
+2. 创建并进入虚拟环境：
 
-目前问题主要集中在
-1. 小红书部分，这部分是直接适用xhs这个库来实现的
-2. web 端（vue版本），这个版本是群友LeeDebug他帮忙做的（再次感谢他）
+```bash
+conda create -n social-auto-upload python=3.10
+conda activate social-auto-upload
+```
 
-因为我日常也在用，我用的不是web端，而是最初`uploader`文件夹里的版本，也就是文档里提到的部分https://sap-doc.nasdaddy.com/
-所以这里一般遇到的问题，我都会尝试去解决，一并推送到该仓库
+也可以使用 `venv`：
 
-目前能遇到的问题，基本上都比较小，可能是元素变化导致的
-在初期设计的时候，其实我已经参考了某些不可变元素去选择，极大的避免了后期因为平台页面修改导致的元素变化
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
 
-该项目不仅仅是技术人员，有不少是非技术的从业人员，他们是没能力修复一个简单弱小的bug
-为了能帮助更多的人，所以呼吁**技术小伙伴**
+3. 安装依赖：
 
-如果大家
-- 修复了一些bug
-- 增加一些对大家有帮助的功能
-
-请积极的提出pr，我会想尽可能的确认后合并的，在此感谢大家对于开源项目的支持，帮助更多的人
-
-我自己也会尽100%的力量，在自己项目稳定后，修bug，加更多的平台，开发出gradio版本（更易部署），大家谅解
-
----
-
-## 🚀支持的平台
-
-本项目通过各平台对应的 `uploader` 模块实现视频上传功能。您可以在 `examples` 目录下找到各个平台的使用示例脚本。
-
-每个示例脚本展示了如何配置和调用相应的 uploader。
-
-## 💾安装指南
-
-1.  **克隆项目**:
-    ```bash
-    git clone https://github.com/dreammis/social-auto-upload.git
-    cd social-auto-upload
-    ```
-
-2.  **安装依赖**:
-    建议在虚拟环境中安装依赖。
-    ```bash
-    conda create -n social-auto-upload python=3.10
-    conda activate social-auto-upload
-    # 挂载清华镜像 or 命令行代理
-    pip install -r requirements.txt
-    ```
-
-3.  **安装 Playwright 浏览器驱动**:
-    ```bash
-    playwright install chromium firefox
-    ```
-    根据您的需求，至少需要安装 `chromium`。`firefox` 主要用于 TikTok 上传（旧版）。
-
-4.  **修改配置文件**:
-    复制 `conf.example.py` 并重命名为 `conf.py`。
-    在 `conf.py` 中，您需要配置以下内容：
-    -   `LOCAL_CHROME_PATH`: 本地 Chrome 浏览器的路径，比如 `C:\Program Files\Google\Chrome\Application\chrome.exe` 保存。
-    
-    **临时解决方案**
-
-    需要在根目录创建 `cookiesFile` 和 `videoFile` 两个文件夹，分别是 存储cookie文件 和 存储上传文件 的文件夹
-
-5.  **配置数据库**:
-    如果 db/database.db 文件不存在，您可以运行以下命令来初始化数据库：
-    ```bash
-    cd db
-    python createTable.py
-    ```
-    此命令将初始化 SQLite 数据库。
-
-6.  **启动后端项目**:
-    ```bash
-    python sau_backend.py
-    ```
-    后端项目将在 `http://localhost:5409` 启动。
-
-7.  **启动前端项目**:
-    ```bash
-    cd sau_frontend
-    npm install
-    npm run dev
-    ```
-    前端项目将在 `http://localhost:5173` 启动，在浏览器中打开此链接即可访问。
-
-
-> 非程序员用户可以参考：[新手级教程](https://juejin.cn/post/7372114027840208911)
-
-
-## 🏁快速开始
-
-1.  **准备 Cookie**: 
-    大多数平台需要登录后的 Cookie 信息才能进行操作。请参照 examples 目录下各 `get_xxx_cookie.py` 脚本（例如 get_douyin_cookie.py, get_ks_cookie.py）的说明，运行脚本以生成并保存 Cookie 文件（通常在 `cookies/[PLATFORM]_uploader/account.json`）。
-
-2.  **准备视频文件**: 
-    将需要上传的视频文件（通常为 `.mp4` 格式）放置在 videos 目录下。
-    部分平台支持视频封面，可以将封面图片（例如 `.png` 格式，与视频同名）也放在此目录。
-    如果需要上传标题及标签，请在视频文件旁边创建一个同名的 `.txt` 文件，内容为标题和标签，以换行分隔。
-
-3.  **修改并运行示例脚本**:
-    打开 examples 目录中您想使用的平台的上传脚本（例如 upload_video_to_douyin.py）。
-    -   根据脚本内的注释和说明，确认 Cookie 文件路径、视频文件路径等配置是否正确。
-    -   您可以修改脚本以适应您的具体需求，例如批量上传、自定义标题、标签等。
-
-4.  **执行上传**:
-    运行修改后的示例脚本，例如：
-    ```bash
-    python examples/upload_video_to_douyin.py
-    ```
-
-## Docker 环境
-### 自己构建镜像
-1. **构建Docker镜像**:
-    ```
-   docker build -t social-auto-upload:latest .
-   ```
-2. **运行Docker容器**:
-    ```
-   docker run -d -it -p 5409:5409 social-auto-upload:latest
-   ```
-### 使用预构建镜像
-1. **拉取镜像**:
-    ```
-   docker pull gzxy/social-auto-upload:latest
-   ```
-2. **运行Docker容器**:
-    ```
-   docker run -d -it -p 5409:5409 gzxy/social-auto-upload:latest
-   ```
-启动容器后访问：[http://localhost:5409](http://localhost:5409)
-
-## 🐇项目背景
-
-该项目最初是我个人用于自动化管理社交媒体视频发布的工具。我的主要发布策略是提前一天设置定时发布，因此项目中很多定时发布相关的逻辑是基于“第二天”的时间进行计算的。
-
-如果您需要立即发布或其他定制化的发布策略，欢迎研究源码或在社区提问。
-
-## 📃详细文档
-
-更详细的文档和说明，请查看：[social-auto-upload 官方文档](https://sap-doc.nasdaddy.com/)
-
-## 🐾交流与支持
-
-[☕ Donate as u like](https://www.buymeacoffee.com/hysn2001m) - 如果您觉得这个项目对您有帮助，可以考虑赞助。
-
-如果您也是独立开发者、技术爱好者，对 #技术变现 #AI创业 #跨境电商 #自动化工具 #视频创作 等话题感兴趣，欢迎加入社群交流。
-
-### Creator
-
-<table>
-    <td align="center">
-        <a href="https://sap-doc.nasdaddy.com/">
-            <img src="media/mp.jpg" width="200px" alt="NasDaddy公众号"/>
-            <br />
-            <sub><b>微信公众号</b></sub>
-        </a>
-        <br />
-        <a href="https://github.com/dreammis/social-auto-upload/commits?author=dreammis" title="Code">💻</a>
-        <br />
-        关注公众号，后台回复 `上传` 获取加群方式
-    </td>
-    <td align="center">
-        <a href="https://sap-doc.nasdaddy.com/">
-            <img src="media/QR.png" width="200px" alt="赞赏码/入群引导"/>
-            <br />
-            <sub><b>交流群 (通过公众号获取)</b></sub>
-        </a>
-        <br />
-        <a href="https://sap-doc.nasdaddy.com/" title="Documentation">📖</a>
-        <br />
-        如果您觉得项目有用，可以考虑打赏支持一下
-    </td>
-</table>
-
-### Active Core Team
-
-<table>
-    <td align="center">
-        <a href="https://leedebug.github.io/">
-            <img src="media/edan-qrcode.png" width="200px" alt="Edan Lee"/>
-            <br />
-            <sub><b>Edan Lee</b></sub>
-        </a>
-        <br />
-        <a href="https://github.com/dreammis/social-auto-upload/commits?author=LeeDebug" title="Code">💻</a>
-        <a href="https://leedebug.github.io/" title="Documentation">📖</a>
-        <br />
-        封装了 api 接口和 web 前端管理界面
-        <br />
-        （请注明来意：进群、学习、企业咨询等）
-    </td>
-</table>
-
-## 🤝贡献指南
-
-欢迎各种形式的贡献，包括但不限于：
-
--   提交 Bug报告 和 Feature请求。
--   改进代码、文档。
--   分享使用经验和教程。
-
-如果您希望贡献代码，请遵循以下步骤：
-
-1.  Fork 本仓库。
-2.  创建一个新的分支 (`git checkout -b feature/YourFeature` 或 `bugfix/YourBugfix`)。
-3.  提交您的更改 (`git commit -m 'Add some feature'`)。
-4.  Push到您的分支 (`git push origin feature/YourFeature`)。
-5.  创建一个 Pull Request。
-
-## 📜许可证
-
-本项目暂时采用 [MIT License](LICENSE) 开源许可证。
-
-## ⭐Star-History
-
-> 如果这个项目对您有帮助，请给一个 ⭐ Star 以表示支持！
-
-[![Star History Chart](https://api.star-history.com/svg?repos=dreammis/social-auto-upload&type=Date)](https://star-history.com/#dreammis/social-auto-upload&Date)
+```bash
+pip install -r requirements.txt
+playwright install chromium firefox
+```
+
+4. 初始化数据库：
+
+```bash
+cd db
+python createTable.py
+cd ..
+```
+
+5. 启动后端：
+
+```bash
+python sau_backend.py
+```
+
+后端默认监听：
+
+```text
+http://127.0.0.1:5409
+```
+
+6. 打开前端：
+
+直接用浏览器打开根目录的 `index.html`。如果是本地文件方式打开，前端会默认请求：
+
+```text
+http://127.0.0.1:5409
+```
+
+## 使用流程
+
+1. 启动后端 `python sau_backend.py`。
+2. 打开 `index.html`。
+3. 在“文件管理”里上传待发布的视频。
+4. 在“账号管理”里新增或选择账号，点击登录。
+5. 前端弹窗显示二维码后，用对应平台 App 扫码。
+6. 如果平台要求短信验证或身份验证，按页面提示继续完成。
+7. 登录成功后，后端保存 Cookie 到 `cookiesFile/`，并在数据库中记录账号信息。
+8. 在“视频发布”里选择视频、账号、标题和标签。
+9. 点击发布，后端会先校验 Cookie，再进入对应平台发布流程。
+
+## Cookie 策略
+
+用户通常只需要扫码一次。只要平台 Cookie 没有失效，后续发布会复用本地保存的 Cookie。
+
+发布前后端会统一执行 Cookie 校验：
+
+- Cookie 文件不存在：跳过该账号。
+- Cookie 已失效：跳过该账号，并提示“登录已过期，请重新扫码”。
+- Cookie 有效：继续调用对应平台 uploader。
+
+这样可以避免某个账号登录失效时影响其他账号继续发布。
+
+## 主要接口
+
+| 接口 | 方法 | 说明 |
+| --- | --- | --- |
+| `/uploadSave` | POST | 上传视频或图片文件 |
+| `/getFiles` | GET | 获取已上传文件列表 |
+| `/deleteFile` | GET | 删除文件记录和本地文件 |
+| `/getAccounts` | GET | 获取账号列表 |
+| `/getValidAccounts` | GET | 获取账号列表，目前不额外启动浏览器校验 |
+| `/login` | GET | SSE 登录流，向前端推送二维码和状态 |
+| `/postVideo` | POST | 发布视频，发布前会校验 Cookie |
+| `/uploadCookie` | POST | 手动上传 Cookie 文件 |
+| `/downloadCookie` | GET | 下载 Cookie 文件 |
+
+## 服务器部署说明
+
+这个项目当前仍处于服务器部署适配阶段。
+
+本机运行时，后端 Playwright 浏览器窗口可以被开发者看到，所以调试二维码、身份验证和页面元素定位比较方便。部署到服务器后，后端浏览器通常运行在无界面环境中，用户无法直接操作它。
+
+因此服务器部署的核心问题不是简单地把 Flask 服务跑起来，而是要保证：
+
+- 二维码能稳定从后端浏览器截图或提取后推送到前端。
+- 前端能实时显示二维码。
+- 平台出现短信验证、身份验证、人机验证时，前端能给用户明确提示。
+- 用户操作完成后，后端能继续保存 Cookie。
+- Cookie 失效后，用户可以重新扫码登录。
+
+当前项目已经按这个方向进行改造，但不同平台登录页经常变化，服务器部署前需要逐个平台做真实验证。
+
+## 不要提交到 GitHub 的文件
+
+以下内容是本地运行数据、敏感信息或大文件，不应该上传到 GitHub：
+
+```text
+conf.py
+cookies/
+cookiesFile/
+videoFile/
+videos/
+db/database.db
+.venv/
+node_modules/
+__pycache__/
+*.log
+```
+
+这些已经在 `.gitignore` 中配置。提交前建议执行：
+
+```bash
+git status --short
+```
+
+确认没有 Cookie、数据库、测试视频等文件出现在待提交列表里。
+
+## examples 目录说明
+
+`examples/` 目录来自原项目，里面是各平台获取 Cookie 和上传视频的示例脚本。它不是用户上传的视频目录，可以提交到 GitHub，用于后续开发时参考 uploader 的调用方式。
+
+真正的视频素材目录是 `videos/` 和运行时上传目录 `videoFile/`，这两个目录不应该提交。
+
+## 开发验证
+
+修改后端代码后，可以先做静态语法检查：
+
+```bash
+python -m py_compile sau_backend.py myUtils/login.py myUtils/auth.py
+```
+
+本地功能验证建议按顺序测试：
+
+1. 启动后端。
+2. 打开 `index.html`。
+3. 用“二维码显示测试”确认前端可以显示二维码。
+4. 选择真实平台扫码登录。
+5. 上传一个测试视频。
+6. 选择已登录账号发布。
+7. 删除或改名 Cookie 文件，再次发布，确认提示重新扫码。
+
+## 免责声明
+
+本项目仅用于学习、研究和个人内容管理自动化。使用时请遵守各平台规则，不要用于垃圾内容发布、批量骚扰、绕过平台风控或其他违规用途。平台页面和登录策略可能随时变化，相关自动化逻辑需要持续维护。
