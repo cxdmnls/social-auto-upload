@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频发布控制台</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+    <style>
+        body { margin: 0; font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif; background-color: #f5f7fa; }
+        .header { background-color: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); }
+        .main-container { max-width: 1200px; margin: 20px auto; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1); min-height: 650px; }
+        .module-title { font-size: 20px; font-weight: bold; margin-bottom: 20px; border-left: 4px solid #409EFF; padding-left: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .sse-log-window { background-color: #1e1e1e; color: #67c23a; font-family: 'Consolas', 'Monaco', monospace; padding: 15px; border-radius: 4px; height: 300px; overflow-y: auto; font-size: 14px; line-height: 1.5; border: 1px solid #333; }
+        .sse-log-item { margin-bottom: 5px; border-bottom: 1px dashed #333; padding-bottom: 2px; }
+        .sse-log-item.error { color: #f56c6c; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <el-menu :default-active="activeTab" mode="horizontal" @select="handleSelect">
+                <el-menu-item index="files">📂 文件管理</el-menu-item>
+                <el-menu-item index="accounts">👥 账号管理</el-menu-item>
+                <el-menu-item index="cookies">🍪 Cookie管理</el-menu-item>
+                <el-menu-item index="publish">🚀 视频发布</el-menu-item>
+            </el-menu>
+        </div>
+
+        <div class="main-container">
+            <div v-if="activeTab === 'files'">
+                <div class="module-title">文件资源库 (视频/图片)</div>
+                <el-upload class="upload-demo" drag action="" :http-request="uploadFileRequest" :show-file-list="false" multiple>
+                    <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                    <div class="el-upload__text">拖拽文件到此处，或 <em>点击上传</em></div>
+                </el-upload>
+                <div style="height:20px;"></div>
+                <el-table :data="fileList" style="width: 100%" v-loading="loadingFiles" border stripe height="500">
+                    <el-table-column prop="id" label="ID" width="80"></el-table-column>
+                    <el-table-column label="预览" width="100">
+                        <template #default="scope">
+                            <el-tag v-if="isImage(scope.row.filename)" type="success">图片</el-tag>
+                            <el-tag v-else>视频</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column prop="filename" label="文件名" min-width="200"></el-table-column>
+                    <el-table-column label="大小" width="120"><template #default="scope">{{ formatSize(scope.row.size || scope.row.filesize) }}</template></el-table-column>
+                    <el-table-column prop="file_path" label="路径" min-width="150" show-overflow-tooltip></el-table-column>
+                    <el-table-column label="操作" width="100" fixed="right">
+                        <template #default="scope">
+                            <el-popconfirm title="删除文件？" @confirm="deleteFile(scope.row.id)">
+                                <template #reference><el-button type="danger" size="small" icon="Delete" circle></el-button></template>
+                            </el-popconfirm>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </div>
+
+            <div v-else-if="activeTab === 'accounts'">
+                <div class="module-title">
+                    <span>账号列表</span>
+                    <div>
+                        <el-button type="success" @click="openLoginDialog(null)">+ 新增登录(SSE)</el-button>
+                        <el-button type="primary" @click="fetchAccounts">刷新</el-button>
+                    </div>
+                </div>
+                <el-table :data="accountList" style="width: 100%" v-loading="loadingAccounts" border stripe>
+                    <el-table-column prop="id" label="ID" width="80"></el-table-column>
+                    <el-table-column label="平台" width="120"><template #default="scope"><el-tag>{{ formatPlatform(scope.row.type) }}</el-tag></template></el-table-column>
+                    <el-table-column prop="name" label="用户名" min-width="150"></el-table-column>
+                    <el-table-column prop="cookie_path" label="Cookie文件" min-width="150" show-overflow-tooltip></el-table-column>
+                    <el-table-column label="操作" width="250" fixed="right">
+                        <template #default="scope">
+                            <el-button type="success" size="small" plain @click="openLoginDialog(scope.row)">登录</el-button>
+                            <el-button type="primary" size="small" icon="Edit" circle @click="openEditAccount(scope.row)"></el-button>
+                            <el-popconfirm title="删除账号？" @confirm="deleteAccount(scope.row.id)">
+                                <template #reference><el-button type="danger" size="small" icon="Delete" circle></el-button></template>
+                            </el-popconfirm>
+                        </template>
+                    </el-table-column>
+                </el-table>
+                <el-dialog v-model="editDialogVisible" title="编辑账号" width="400px">
+                    <el-form :model="editForm">
+                        <el-form-item label="用户名"><el-input v-model="editForm.name"></el-input></el-form-item>
+                        <el-form-item label="平台">
+                            <el-select v-model="editForm.type">
+                                <el-option label="抖音" value="douyin"></el-option>
+                                <el-option label="视频号" value="shipinhao"></el-option>
+                                <el-option label="小红书" value="xhs"></el-option>
+                                <el-option label="快手" value="kuaishou"></el-option>
+                                <el-option label="哔哩哔哩" value="bilibili"></el-option>
+                            </el-select>
+                        </el-form-item>
+                    </el-form>
+                    <template #footer>
+                        <el-button @click="editDialogVisible = false">取消</el-button>
+                        <el-button type="primary" @click="saveAccountInfo">保存</el-button>
+                    </template>
+                </el-dialog>
+            </div>
+
+            <div v-else-if="activeTab === 'cookies'">
+                <div class="module-title">Cookie 管理</div>
+                <el-row :gutter="20">
+                    <el-col :span="12">
+                        <el-card shadow="hover">
+                            <template #header>上传 Cookie 文件</template>
+                            <el-upload drag action="" :http-request="uploadCookieRequest" :show-file-list="false">
+                                <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                                <div class="el-upload__text">拖拽JSON/TXT文件到此处</div>
+                            </el-upload>
+                        </el-card>
+                    </el-col>
+                    <el-col :span="12">
+                        <el-card shadow="hover">
+                            <template #header>下载 Cookie</template>
+                            <el-input v-model="cookieDownloadPath" placeholder="输入文件路径">
+                                <template #append><el-button @click="downloadCookieFile(cookieDownloadPath)">下载</el-button></template>
+                            </el-input>
+                        </el-card>
+                    </el-col>
+                </el-row>
+            </div>
+
+            <div v-else-if="activeTab === 'publish'">
+                <div class="module-title">发布视频</div>
+                
+                <el-form :model="publishForm" label-width="120px" v-loading="publishing">
+                    
+                    <el-form-item label="选择视频">
+                        <el-select v-model="publishForm.file_id" placeholder="请选择要发布的视频文件" style="width: 100%">
+                            <el-option v-for="item in videoFiles" :key="item.id" :label="item.filename" :value="item.id">
+                                <span style="float: left">{{ item.filename }}</span>
+                                <span style="float: right; color: #8492a6; font-size: 13px">{{ formatSize(item.filesize || item.size) }}</span>
+                            </el-option>
+                        </el-select>
+                    </el-form-item>
+
+                    <el-form-item label="视频封面">
+                        <el-select v-model="publishForm.thumbnail_id" placeholder="[可选] 选择封面图片 (抖音/B站)" style="width: 100%" clearable>
+                            <el-option v-for="item in imageFiles" :key="item.id" :label="item.filename" :value="item.id">
+                                <span style="float: left">🖼️ {{ item.filename }}</span>
+                            </el-option>
+                        </el-select>
+                        <div style="font-size: 12px; color: #999; margin-top: 5px;">如果不选，平台会自动截取视频第一帧。请在「文件管理」上传 jpg/png 图片。</div>
+                    </el-form-item>
+
+                    <el-form-item label="发布账号">
+                        <el-select v-model="publishForm.account_ids" multiple placeholder="请选择发布账号" style="width: 100%">
+                            <el-option v-for="item in accountList" :key="item.id" :label="`${formatPlatform(item.type)} - ${item.name}`" :value="item.id">
+                            </el-option>
+                        </el-select>
+                    </el-form-item>
+
+                    <el-form-item label="视频标题">
+                        <el-input v-model="publishForm.title" placeholder="吸引人的标题"></el-input>
+                    </el-form-item>
+
+                    <el-form-item label="视频标签">
+                        <el-input v-model="publishForm.tags" placeholder="例如: #风景 #旅行 (用空格分隔)"></el-input>
+                    </el-form-item>
+
+                    <el-form-item>
+                        <el-button type="primary" size="large" @click="handlePublish" :disabled="!publishForm.file_id || publishForm.account_ids.length === 0">立即发布</el-button>
+                    </el-form-item>
+                </el-form>
+
+                <div v-if="publishResult" style="margin-top: 20px;">
+                    <el-alert v-for="(res, idx) in publishResult" :key="idx" :title="res" type="success" :closable="false" style="margin-bottom: 5px;"></el-alert>
+                </div>
+            </div>
+        </div>
+
+        <el-dialog v-model="sseDialogVisible" title="实时登录状态 (SSE)" width="600px" :before-close="handleSSEClose">
+            <div v-if="!isSSERunning" style="margin-bottom: 15px;">
+                <el-form :inline="true">
+                    <el-form-item label="平台">
+                        <el-select v-model="sseForm.type" placeholder="选择平台" style="width: 120px;">
+                            <el-option label="抖音" value="douyin"></el-option>
+                            <el-option label="视频号" value="shipinhao"></el-option>
+                            <el-option label="小红书" value="xhs"></el-option>
+                            <el-option label="快手" value="kuaishou"></el-option>
+                            <el-option label="哔哩哔哩" value="bilibili"></el-option>
+                            <el-option label="二维码显示测试" value="mock"></el-option>
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="账号ID">
+                        <el-input v-model="sseForm.id" placeholder="唯一标识(如手机号)" style="width: 150px;"></el-input>
+                    </el-form-item>
+                    <el-form-item><el-button type="primary" @click="startSSE">开始获取 Cookie</el-button></el-form-item>
+                </el-form>
+            </div>
+            
+            <div v-if="sseQrCode" style="text-align: center; margin-bottom: 15px;">
+                <p style="margin-bottom: 5px;">请扫描下方二维码登录:</p>
+                <img :src="sseQrCode" style="width: 200px; height: 200px; border: 1px solid #ccc; padding: 5px;" />
+            </div>
+
+            <el-alert
+                v-if="sseVerificationTip"
+                :title="sseVerificationTip"
+                type="warning"
+                show-icon
+                :closable="false"
+                style="margin-bottom: 15px;"
+            ></el-alert>
+
+            <div class="sse-log-window" id="sseLogContainer">
+                <div v-for="(log, index) in sseLogs" :key="index" class="sse-log-item" :class="{ 'error': log.includes('失败') || log.includes('Error') }">> {{ log }}</div>
+            </div>
+        </el-dialog>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <script>
+        const { createApp, ref, reactive, onMounted, computed, nextTick } = Vue;
+        const { ElMessage } = ElementPlus;
+
+        const app = createApp({
+            setup() {
+                const API_BASE = window.location.protocol === 'file:'
+                    ? 'http://127.0.0.1:5409'
+                    : window.location.origin;
+                const activeTab = ref('files');
+
+                const fileList = ref([]);
+                const accountList = ref([]);
+                const loadingFiles = ref(false);
+                const loadingAccounts = ref(false);
+
+                // 计算属性：分离视频和图片
+                const videoFiles = computed(() => fileList.value.filter(f => !isImage(f.filename)));
+                const imageFiles = computed(() => fileList.value.filter(f => isImage(f.filename)));
+
+                const isImage = (filename) => {
+                    if(!filename) return false;
+                    const ext = filename.split('.').pop().toLowerCase();
+                    return ['jpg', 'jpeg', 'png', 'gif', 'bmp'].includes(ext);
+                }
+
+                // 表单数据
+                const editDialogVisible = ref(false);
+                const editForm = reactive({ id: '', name: '', type: '' });
+                const publishForm = reactive({
+                    file_id: null,
+                    thumbnail_id: null,
+                    account_ids: [],
+                    title: '',
+                    tags: ''
+                });
+                const publishing = ref(false);
+                const publishResult = ref(null);
+
+                // SSE 相关
+                const sseDialogVisible = ref(false);
+                const sseForm = reactive({ type: 'douyin', id: '' });
+                const sseLogs = ref([]);
+                const sseQrCode = ref(null); // 新增：用于显示二维码
+                const sseVerificationTip = ref('');
+                const isSSERunning = ref(false);
+                let eventSource = null;
+                const cookieDownloadPath = ref('');
+
+                const handleSelect = (key) => {
+                    activeTab.value = key;
+                    if(key === 'files' || key === 'publish') fetchFiles();
+                    if(key === 'accounts' || key === 'publish') fetchAccounts();
+                };
+
+                const formatSize = (mb) => {
+                    if(!mb) return '0 MB';
+                    return mb + ' MB';
+                };
+                
+                // 格式化平台名称，增加了 bilibili 支持
+                const formatPlatform = (t) => {
+                    const map = {
+                        'douyin': '抖音',
+                        'shipinhao': '视频号',
+                        'xhs': '小红书',
+                        'kuaishou': '快手',
+                        'bilibili': '哔哩哔哩',
+                        '5': '哔哩哔哩', // 兼容后端可能存的 type=5
+                        '1': '小红书',
+                        '2': '视频号',
+                        '3': '抖音',
+                        '4': '快手'
+                    };
+                    return map[String(t).toLowerCase()] || t;
+                };
+
+                // API Calls
+                const fetchFiles = async () => {
+                    try {
+                        const res = await axios.get(`${API_BASE}/getFiles`);
+                        fileList.value = res.data.data || [];
+                    } catch(e) { console.error(e); }
+                };
+                const uploadFileRequest = async (op) => {
+                    const fd = new FormData(); fd.append('file', op.file);
+                    try { await axios.post(`${API_BASE}/uploadSave`, fd); ElMessage.success('上传成功'); fetchFiles(); } catch(e){ ElMessage.error('上传失败'); }
+                };
+                const deleteFile = async (id) => {
+                    try { await axios.get(`${API_BASE}/deleteFile`, {params:{id}}); ElMessage.success('删除成功'); fetchFiles(); } catch(e){ ElMessage.error('失败'); }
+                };
+                const fetchAccounts = async () => {
+                    try {
+                        const res = await axios.get(`${API_BASE}/getAccounts`);
+                        accountList.value = res.data.data || [];
+                    } catch(e) { console.error(e); }
+                };
+                const deleteAccount = async (id) => {
+                    try { await axios.get(`${API_BASE}/deleteAccount`, {params:{id}}); ElMessage.success('已删除'); fetchAccounts(); } catch(e){ ElMessage.error('失败'); }
+                };
+                const openEditAccount = (row) => {
+                    editForm.id = row.id; editForm.name = row.name; editForm.type = row.type;
+                    editDialogVisible.value = true;
+                };
+                const saveAccountInfo = async () => {
+                    try { await axios.post(`${API_BASE}/updateUserinfo`, editForm); ElMessage.success('保存成功'); editDialogVisible.value = false; fetchAccounts(); } catch(e){ ElMessage.error('失败'); }
+                };
+                const uploadCookieRequest = async (op) => {
+                    const fd = new FormData(); fd.append('file', op.file);
+                    try { await axios.post(`${API_BASE}/uploadCookie`, fd); ElMessage.success('Cookie上传成功'); } catch(e){ ElMessage.error('失败'); }
+                };
+                const downloadCookieFile = (path) => {
+                    if(!path) return;
+                    window.location.href = `${API_BASE}/downloadCookie?filePath=${encodeURIComponent(path)}`;
+                };
+
+                // 发布逻辑
+                const handlePublish = async () => {
+                    publishing.value = true;
+                    publishResult.value = null;
+                    try {
+                        const payload = {
+                            file_id: publishForm.file_id,
+                            thumbnail_id: publishForm.thumbnail_id,
+                            account_ids: publishForm.account_ids,
+                            title: publishForm.title,
+                            tags: publishForm.tags
+                        };
+                        const res = await axios.post(`${API_BASE}/postVideo`, payload);
+                        publishResult.value = res.data.data;
+                        ElMessage.success('发布完成');
+                    } catch (err) {
+                        ElMessage.error('发布失败: ' + (err.response?.data?.msg || err.message));
+                    } finally {
+                        publishing.value = false;
+                    }
+                };
+
+                // SSE 逻辑
+                const openLoginDialog = (row) => {
+                    sseLogs.value = []; 
+                    sseQrCode.value = null; // 重置二维码
+                    sseVerificationTip.value = '';
+                    isSSERunning.value = false;
+                    if(row) { 
+                        sseForm.type = row.type; 
+                        sseForm.id = row.id; 
+                        sseDialogVisible.value = true; 
+                        setTimeout(startSSE, 500); 
+                    } else { 
+                        sseForm.type = 'douyin'; 
+                        sseForm.id = ''; 
+                        sseDialogVisible.value = true; 
+                    }
+                };
+                const startSSE = () => {
+                    if (!sseForm.id) return ElMessage.warning('请输入ID');
+                    isSSERunning.value = true;
+                    sseQrCode.value = null;
+                    sseVerificationTip.value = '';
+                    
+                    if(eventSource) eventSource.close();
+                    
+                    eventSource = new EventSource(`${API_BASE}/login?type=${sseForm.type}&id=${sseForm.id}`);
+                    
+                    const extractQrCode = (msg) => {
+                        try {
+                            const parsed = JSON.parse(msg);
+                            if (parsed && parsed.type === 'qrcode' && parsed.data) {
+                                return parsed.data;
+                            }
+                        } catch (e) {
+                            // 不是 JSON 时继续兼容旧格式
+                        }
+
+                        if (msg.startsWith('data:image') || msg.startsWith('http://') || msg.startsWith('https://')) {
+                            return msg;
+                        }
+
+                        if (/^[A-Za-z0-9+/=]+$/.test(msg) && msg.length > 100) {
+                            return `data:image/png;base64,${msg}`;
+                        }
+
+                        return '';
+                    };
+
+                    const parseSsePayload = (msg) => {
+                        try { return JSON.parse(msg); } catch (e) { return null; }
+                    };
+
+                    eventSource.onmessage = (e) => {
+                        const msg = e.data;
+                        const payload = parseSsePayload(msg);
+                        const qrcode = extractQrCode(msg);
+                        
+                        if (qrcode) {
+                             sseQrCode.value = qrcode;
+                             sseLogs.value.push(">>> 收到二维码，请扫描");
+                        } else if (payload && payload.type === 'verification') {
+                             sseVerificationTip.value = payload.message || '平台要求身份验证，请按提示完成操作。';
+                             sseLogs.value.push(">>> " + sseVerificationTip.value);
+                        } else {
+                             sseLogs.value.push(msg);
+                        }
+
+                        nextTick(() => { const c = document.getElementById('sseLogContainer'); if(c) c.scrollTop = c.scrollHeight; });
+                        
+                        if(msg === '200' || msg === '500' || msg.includes('流程结束')) { 
+                            isSSERunning.value = false; 
+                            eventSource.close(); 
+                            fetchAccounts(); 
+                        }
+                    };
+                    
+                    eventSource.onerror = () => { 
+                        sseLogs.value.push('连接断开'); 
+                        isSSERunning.value = false; 
+                        eventSource.close(); 
+                    };
+                };
+                const handleSSEClose = (done) => { if(eventSource) eventSource.close(); done(); };
+
+                onMounted(() => { fetchFiles(); });
+
+                return {
+                    activeTab, handleSelect, isImage, formatSize, formatPlatform,
+                    fileList, videoFiles, imageFiles, loadingFiles, uploadFileRequest, deleteFile,
+                    accountList, loadingAccounts, fetchAccounts, deleteAccount, openEditAccount, editDialogVisible, editForm, saveAccountInfo,
+                    publishForm, publishing, publishResult, handlePublish,
+                    sseDialogVisible, sseForm, sseLogs, sseQrCode, isSSERunning, openLoginDialog, startSSE, handleSSEClose,
+                    sseVerificationTip,
+                    uploadCookieRequest, cookieDownloadPath, downloadCookieFile
+                };
+            }
+        });
+
+        for (const [key, component] of Object.entries(ElementPlusIconsVue)) { app.component(key, component); }
+        app.use(ElementPlus);
+        app.mount('#app');
+    </script>
+</body>
+</html>
