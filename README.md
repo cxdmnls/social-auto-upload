@@ -162,37 +162,6 @@ http://127.0.0.1:5409
 
 当前项目已经按这个方向进行改造，但不同平台登录页经常变化，服务器部署前需要逐个平台做真实验证。
 
-## 不要提交到 GitHub 的文件
-
-以下内容是本地运行数据、敏感信息或大文件，不应该上传到 GitHub：
-
-```text
-conf.py
-cookies/
-cookiesFile/
-videoFile/
-videos/
-db/database.db
-.venv/
-node_modules/
-__pycache__/
-*.log
-```
-
-这些已经在 `.gitignore` 中配置。提交前建议执行：
-
-```bash
-git status --short
-```
-
-确认没有 Cookie、数据库、测试视频等文件出现在待提交列表里。
-
-## examples 目录说明
-
-`examples/` 目录来自原项目，里面是各平台获取 Cookie 和上传视频的示例脚本。它不是用户上传的视频目录，可以提交到 GitHub，用于后续开发时参考 uploader 的调用方式。
-
-真正的视频素材目录是 `videos/` 和运行时上传目录 `videoFile/`，这两个目录不应该提交。
-
 ## 开发验证
 
 修改后端代码后，可以先做静态语法检查：
